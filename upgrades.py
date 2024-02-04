@@ -17,7 +17,7 @@ class ImageROISelector(QMainWindow):
         self.col_label = QLabel('Columns:', self)
         self.col_entry = QLineEdit(self)
 
-        self.roi_rect = None
+        self.roi_rects = []  # List to store multiple ROI rectangles
 
         self.roi_count_label = QLabel('', self)  # New label for displaying ROI count
 
@@ -54,44 +54,39 @@ class ImageROISelector(QMainWindow):
             self.image_pixmap = QPixmap.fromImage(image.scaled(1000, 1000, Qt.KeepAspectRatio))
             self.image_label.setPixmap(self.image_pixmap)
             self.image_label.mousePressEvent = self.mouse_press_event
+            self.image_label.mouseMoveEvent = self.mouse_move_event  # Connect mouseMoveEvent
             self.image_label.mouseReleaseEvent = self.mouse_release_event
 
     def mouse_press_event(self, event):
-        self.roi_rect = QRect(event.pos(), event.pos())
+        # Initialize temp rectangle
+        self.temp_roi_rect = QRect(event.pos(), event.pos())  
+        self.temp_roi_rect_valid = True
+
+    def mouse_move_event(self, event):
+        if hasattr(self, "temp_roi_rect"):
+            if self.temp_roi_rect_valid:
+                self.temp_roi_rect.setBottomRight(event.pos())  # Update temp rectangle
+                self.display_roi(temp=True)  # Display temp rectangle
 
     def mouse_release_event(self, event):
-        if self.roi_rect is not None:
-            self.roi_rect.setBottomRight(event.pos())
-            self.roi_rect = self.roi_rect.normalized()  # Normalize the QRect to ensure proper selection
-            self.display_roi()
+        if hasattr(self, "temp_roi_rect"):
+            if self.temp_roi_rect_valid:
+                self.temp_roi_rect.setBottomRight(event.pos())  # Update temp rectangle
+                self.roi_rects.append(self.temp_roi_rect.normalized())  # Add final ROI rectangle to list
+                self.temp_roi_rect_valid = False
+                self.display_roi()  # Display all ROIs
 
-    def display_roi(self):
-        if self.image_pixmap and self.roi_rect:
-            roi_image = self.image_pixmap.copy(self.roi_rect)
-            painter = QPainter(self.image_pixmap)
+    def display_roi(self, temp=False):
+        if self.image_pixmap:
+            pixmap_copy = self.image_pixmap.copy()
+            painter = QPainter(pixmap_copy)
             painter.setPen(Qt.red)
-            painter.drawRect(self.roi_rect)
+            for roi_rect in self.roi_rects:
+                painter.drawRect(roi_rect)  # Display all ROI rectangles
+            if temp and hasattr(self, "temp_roi_rect") and self.temp_roi_rect_valid:
+                painter.drawRect(self.temp_roi_rect)  # Display temp rectangle
             painter.end()
-
-            # Get the selected ROI coordinates
-            roi_x = self.roi_rect.x()
-            roi_y = self.roi_rect.y()
-            roi_width = self.roi_rect.width()
-            roi_height = self.roi_rect.height()
-
-            print(f'Selected ROI: x={roi_x}, y={roi_y}, width={roi_width}, height={roi_height}')
-
-            self.image_label.setPixmap(self.image_pixmap)
-            self.roi_rect = None  # Move this line to the end of the method
-
-            # Update ROI count label
-            current_text = self.roi_count_label.text()
-            if current_text.startswith('Number of ROIs: '):
-                num_rois = int(current_text[len('Number of ROIs: '):]) + 1
-            else:
-                num_rois = 1
-            self.roi_count_label.setText(f'Number of ROIs: {num_rois}')
-
+            self.image_label.setPixmap(pixmap_copy)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
